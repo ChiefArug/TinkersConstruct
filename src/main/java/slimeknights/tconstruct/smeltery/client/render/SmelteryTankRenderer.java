@@ -1,22 +1,22 @@
 package slimeknights.tconstruct.smeltery.client.render;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
+import net.minecraftforge.client.model.pipeline.QuadBakingVertexConsumer;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fluids.FluidType;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import slimeknights.mantle.client.render.FluidRenderer;
-import slimeknights.tconstruct.library.client.TinkerRenderTypes;
 import slimeknights.tconstruct.smeltery.block.entity.tank.SmelteryTank;
+import slimeknights.tconstruct.smeltery.client.render.HeatingStructureBlockEntityRenderer.FluidCuboids;
 import slimeknights.tconstruct.smeltery.client.screen.module.GuiSmelteryTank;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Helper class to render the smeltery tank */
 public class SmelteryTankRenderer {
@@ -24,6 +24,10 @@ public class SmelteryTankRenderer {
   private static final float FLUID_OFFSET = 0.005f;
   /** Amount to subtract from the height for fluid offset */
   private static final int HEIGHT_OFFSET = (int) (FLUID_OFFSET * 2000d);
+  /** Empty baked quad array for when fluids shouldn't render */
+  private static final BakedQuad[] NO_QUADS = new BakedQuad[0];
+  /** Identity matrix because theres no constant for this for some reason */
+  private static final Matrix4f IDENTITY = new Matrix4f();
 
   /**
    * Gets the integer bounds for rendering a fluid with the given delta
@@ -52,15 +56,13 @@ public class SmelteryTankRenderer {
 
   /**
    * Renders the smeltery tank fluids, relative to tankMinPos
-   * @param matrices    Matrix stack instance
-   * @param buffer      Buffer instance
    * @param tank        Smeltery tank
    * @param brightness  Packed lighting values
    * @param tankMinPos  Min position for fluid rendering
    * @param tankMaxPos  Max position for fluid rendering
    */
-  public static void renderFluids(PoseStack matrices, MultiBufferSource buffer, SmelteryTank<?> tank,
-                                  BlockPos tankMinPos, BlockPos tankMaxPos, int brightness) {
+  public static FluidCuboids computeQuads(SmelteryTank<?> tank,
+                                          BlockPos tankMinPos, BlockPos tankMaxPos, int brightness) {
     List<FluidStack> fluids = tank.getFluids();
     // empty smeltery :(
     if(!fluids.isEmpty()) {
@@ -69,7 +71,7 @@ public class SmelteryTankRenderer {
       int zd = tankMaxPos.getZ() - tankMinPos.getZ();
       // somehow people are getting a rendering crash with these being negative, no idea how but easy to catch
       if (xd < 0 || zd < 0) {
-        return;
+        return FluidCuboids.EMPTY;
       }
       float[] xBounds = getBlockBounds(xd);
       float[] zBounds = getBlockBounds(zd);
@@ -80,20 +82,20 @@ public class SmelteryTankRenderer {
       int[] heights = GuiSmelteryTank.calcLiquidHeights(fluids, tank.getCapacity(), yd * 1000 - HEIGHT_OFFSET, 100);
 
       // rendering time
-      VertexConsumer builder = buffer.getBuffer(TinkerRenderTypes.SMELTERY_FLUID);
       float curY = FLUID_OFFSET;
+      var boids = new BakedQuad[fluids.size()][];
       for (int i = 0; i < fluids.size(); i++) {
         float h = (float) heights[i] / 1000f;
-        renderLargeFluidCuboid(matrices, builder, fluids.get(i), brightness, xd, xBounds, zd, zBounds, curY, curY + h);
+        boids[i] = computeLargeFluidCuboid(fluids.get(i), brightness, xd, xBounds, zd, zBounds, curY, curY + h);
         curY += h;
       }
+      return new FluidCuboids(fluids, boids);
     }
+    return FluidCuboids.EMPTY;
   }
 
   /**
    * Renders a large fluid cuboid
-   * @param matrices   Matrix stack intance
-   * @param builder    Builder instance
    * @param fluid      Fluid to render
    * @param brightness Packed lighting values
    * @param xd         X size for renderer
@@ -103,10 +105,10 @@ public class SmelteryTankRenderer {
    * @param yMin       Min y position
    * @param yMax       Max y position
    */
-  private static void renderLargeFluidCuboid(PoseStack matrices, VertexConsumer builder, FluidStack fluid, int brightness,
-                                             int xd, float[] xBounds, int zd, float[] zBounds, float yMin, float yMax) {
+  private static BakedQuad[] computeLargeFluidCuboid(FluidStack fluid, int brightness,
+                                                     int xd, float[] xBounds, int zd, float[] zBounds, float yMin, float yMax) {
     if(yMin >= yMax || fluid.isEmpty()) {
-      return;
+      return NO_QUADS;
     }
     // fluid attributes
     IClientFluidTypeExtensions attributes = IClientFluidTypeExtensions.of(fluid.getFluid());
@@ -126,27 +128,38 @@ public class SmelteryTankRenderer {
     float[] yBounds = getBlockBounds(yd, yMin, yMax);
 
     // render each side
-    Matrix4f matrix = matrices.last().pose();
     Vector3f from = new Vector3f();
     Vector3f to = new Vector3f();
     int rotation = upsideDown ? 180 : 0;
+
+    int quadCount =
+        // each set of faces
+        2 * (yd + 1) * (xd + 1) +
+        2 * (xd + 1) * (zd + 1) +
+        2 * (xd + 1) * (yd + 1);
+    BakedQuad[] quads = new BakedQuad[quadCount];
+    AtomicInteger index = new AtomicInteger(0);
+
+    // we collect the vertices per cuboid for potential optimisations and because it is much easier to calculate the buffer size here.
+    var builder = new QuadBakingVertexConsumer(quad -> quads[index.getAndIncrement()] = quad);
     for(int y = 0; y <= yd; y++) {
       for(int z = 0; z <= zd; z++) {
         for(int x = 0; x <= xd; x++) {
           from.set(xBounds[x], yBounds[y], zBounds[z]);
           to.set(xBounds[x + 1], yBounds[y + 1], zBounds[z + 1]);
-          if (x == 0)  FluidRenderer.putTexturedQuad(builder, matrix, still, from, to, Direction.WEST,  color, brightness, rotation, false);
-          if (x == xd) FluidRenderer.putTexturedQuad(builder, matrix, still, from, to, Direction.EAST,  color, brightness, rotation, false);
-          if (z == 0)  FluidRenderer.putTexturedQuad(builder, matrix, still, from, to, Direction.NORTH, color, brightness, rotation, false);
-          if (z == zd) FluidRenderer.putTexturedQuad(builder, matrix, still, from, to, Direction.SOUTH, color, brightness, rotation, false);
-          if (y == yd) FluidRenderer.putTexturedQuad(builder, matrix, still, from, to, Direction.UP,    color, brightness, rotation, false);
+          if (x == 0)  FluidRenderer.putTexturedQuad(builder, IDENTITY, still, from, to, Direction.WEST,  color, brightness, rotation, false);
+          if (x == xd) FluidRenderer.putTexturedQuad(builder, IDENTITY, still, from, to, Direction.EAST,  color, brightness, rotation, false);
+          if (z == 0)  FluidRenderer.putTexturedQuad(builder, IDENTITY, still, from, to, Direction.NORTH, color, brightness, rotation, false);
+          if (z == zd) FluidRenderer.putTexturedQuad(builder, IDENTITY, still, from, to, Direction.SOUTH, color, brightness, rotation, false);
+          if (y == yd) FluidRenderer.putTexturedQuad(builder, IDENTITY, still, from, to, Direction.UP,    color, brightness, rotation, false);
           if (y == 0) {
             // increase Y position slightly to prevent z fighting on neighboring fluids
             from.y = from.y() + 0.001f;
-            FluidRenderer.putTexturedQuad(builder, matrix, still,   from, to, Direction.DOWN,  color, brightness, rotation, false);
+            FluidRenderer.putTexturedQuad(builder, IDENTITY, still,   from, to, Direction.DOWN,  color, brightness, rotation, false);
           }
         }
       }
     }
+    return quads;
   }
 }

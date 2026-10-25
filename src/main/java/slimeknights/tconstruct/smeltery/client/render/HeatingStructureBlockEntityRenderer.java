@@ -7,6 +7,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider.Context;
 import net.minecraft.client.renderer.entity.ItemRenderer;
@@ -20,6 +21,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraftforge.client.model.data.ModelData;
+import net.minecraftforge.fluids.FluidStack;
 import org.joml.Quaternionf;
 import slimeknights.tconstruct.common.config.Config;
 import slimeknights.tconstruct.library.client.TinkerRenderTypes;
@@ -29,8 +31,32 @@ import slimeknights.tconstruct.smeltery.block.entity.controller.HeatingStructure
 import slimeknights.tconstruct.smeltery.block.entity.module.MeltingModuleInventory;
 import slimeknights.tconstruct.smeltery.block.entity.multiblock.HeatingStructureMultiblock.StructureData;
 
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
+
 public class HeatingStructureBlockEntityRenderer implements BlockEntityRenderer<HeatingStructureBlockEntity> {
   private static final float ITEM_SCALE = 15f/16f;
+
+  sealed interface CachedCuboids {}
+  enum Invalidated implements CachedCuboids {INSTANCE}
+
+  public record FluidCuboids(List<FluidStack> cuboids, BakedQuad[][] quads) implements CachedCuboids {
+    public static FluidCuboids EMPTY = new FluidCuboids(List.of(), new BakedQuad[0][]);
+    public FluidCuboids {
+      if (cuboids.size() != quads.length) throw new IllegalArgumentException();
+    }
+  }
+  private static final Map<HeatingStructureBlockEntity, CachedCuboids> FLUID_CACHE = new WeakHashMap<>();
+
+  public static void removeFromCache(HeatingStructureBlockEntity be) {
+    FLUID_CACHE.remove(be);
+  }
+
+  // For now we just mark as invalidated. later on we may selectively invalidate depending on changes
+  public static void update(HeatingStructureBlockEntity be) {
+    FLUID_CACHE.computeIfPresent(be, (b, c) -> Invalidated.INSTANCE);
+  }
 
   public HeatingStructureBlockEntityRenderer(Context context) {}
 
@@ -75,7 +101,12 @@ public class HeatingStructureBlockEntityRenderer implements BlockEntityRenderer<
     matrices.pushPose();
     matrices.translate(minPos.getX() - pos.getX(), minPos.getY() - pos.getY(), minPos.getZ() - pos.getZ());
     // render tank fluids, use minPos for brightness
-    SmelteryTankRenderer.renderFluids(matrices, buffer, smeltery.getTank(), minPos, maxPos, LevelRenderer.getLightColor(world, minPos));
+    var l = SmelteryTankRenderer.computeQuads(smeltery.getTank(), minPos, maxPos, LevelRenderer.getLightColor(world, minPos));
+    for (BakedQuad[] quads : l.quads) {
+      for (BakedQuad quad : quads) {
+        buffer.getBuffer(TinkerRenderTypes.SMELTERY_FLUID).putBulkData(matrices.last(), quad, 1, 1, 1, 1, 1);
+      }
+    }
 
     // render items
     int xd = 1 + maxPos.getX() - minPos.getX();

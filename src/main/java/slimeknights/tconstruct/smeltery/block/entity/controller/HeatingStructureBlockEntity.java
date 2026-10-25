@@ -49,6 +49,7 @@ import slimeknights.tconstruct.smeltery.block.entity.multiblock.MultiblockResult
 import slimeknights.tconstruct.smeltery.block.entity.tank.IDisplayFluidListener;
 import slimeknights.tconstruct.smeltery.block.entity.tank.ISmelteryTankHandler;
 import slimeknights.tconstruct.smeltery.block.entity.tank.SmelteryTank;
+import slimeknights.tconstruct.smeltery.client.render.HeatingStructureBlockEntityRenderer;
 import slimeknights.tconstruct.smeltery.menu.HeatingStructureContainerMenu;
 import slimeknights.tconstruct.smeltery.network.StructureErrorPositionPacket;
 import slimeknights.tconstruct.smeltery.network.StructureUpdatePacket;
@@ -459,6 +460,7 @@ public abstract class HeatingStructureBlockEntity extends NameableBlockEntity im
   @Override
   public void updateFluidsFromPacket(List<FluidStack> fluids) {
     tank.setFluids(fluids);
+    HeatingStructureBlockEntityRenderer.update(this);
   }
 
   /** Updates all fluid display listeners */
@@ -677,6 +679,12 @@ public abstract class HeatingStructureBlockEntity extends NameableBlockEntity im
     return nbt;
   }
 
+  /* Handle caching fluid rendering */
+  @Override
+  public void onChunkUnloaded() {
+    if (level != null && level.isClientSide)
+      HeatingStructureBlockEntityRenderer.removeFromCache(this);
+  }
 
   /* Helpers */
 
