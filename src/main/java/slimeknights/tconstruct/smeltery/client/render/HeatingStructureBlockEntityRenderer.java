@@ -33,6 +33,7 @@ import slimeknights.tconstruct.smeltery.block.entity.multiblock.HeatingStructure
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.WeakHashMap;
 
 public class HeatingStructureBlockEntityRenderer implements BlockEntityRenderer<HeatingStructureBlockEntity> {
@@ -100,9 +101,12 @@ public class HeatingStructureBlockEntityRenderer implements BlockEntityRenderer<
     // offset to make rendering min pos relative
     matrices.pushPose();
     matrices.translate(minPos.getX() - pos.getX(), minPos.getY() - pos.getY(), minPos.getZ() - pos.getZ());
-    // render tank fluids, use minPos for brightness
-    var l = SmelteryTankRenderer.computeQuads(smeltery.getTank(), minPos, maxPos, LevelRenderer.getLightColor(world, minPos));
-    for (BakedQuad[] quads : l.quads) {
+
+    // fetch any cached cuboids and if there are none (or they are invalidated), then compute them
+    var cuboids = (FluidCuboids) FLUID_CACHE.compute(smeltery, (s, value) -> value == null || value == Invalidated.INSTANCE ? computeCuboids(s) : value);
+
+    // render the fluid quads
+    for (BakedQuad[] quads : cuboids.quads) {
       for (BakedQuad quad : quads) {
         buffer.getBuffer(TinkerRenderTypes.SMELTERY_FLUID).putBulkData(matrices.last(), quad, 1, 1, 1, 1, 1);
       }
@@ -161,6 +165,17 @@ public class HeatingStructureBlockEntityRenderer implements BlockEntityRenderer<
     }
 
     matrices.popPose();
+  }
+
+  private static CachedCuboids computeCuboids(HeatingStructureBlockEntity smeltery) {
+    StructureData structure = Objects.requireNonNull(smeltery.getStructure());
+    BlockPos minInside = structure.getMinInside();
+    BlockPos maxInside = structure.getMaxInside();
+    Level level = Objects.requireNonNull(smeltery.getLevel());
+
+    // we use the min pos for brightness
+    int lightColor = LevelRenderer.getLightColor(level, minInside);
+    return SmelteryTankRenderer.computeQuads(smeltery.getTank(), minInside, maxInside, lightColor);
   }
 
   @Override
