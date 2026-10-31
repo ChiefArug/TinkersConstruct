@@ -204,6 +204,9 @@ dependencies {
     compileOnly fg.deobf("curse.maven:balm-531761:5999476")
     compileOnly fg.deobf("curse.maven:crafting-tweaks-233071:5623639")
 
+    // spark for performance testing
+    runtimeOnly fg.deobf("curse.maven:spark-361579:4738952")
+
     deployerJars 'org.apache.maven.wagon:wagon-ssh:2.2'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
