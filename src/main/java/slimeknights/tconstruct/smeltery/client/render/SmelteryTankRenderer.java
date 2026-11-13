@@ -136,7 +136,7 @@ public class SmelteryTankRenderer {
         // each set of faces
         2 * (yd + 1) * (xd + 1) +
         2 * (xd + 1) * (zd + 1) +
-        2 * (xd + 1) * (yd + 1);
+        2 * (zd + 1) * (yd + 1);
     BakedQuad[] quads = new BakedQuad[quadCount];
     AtomicInteger index = new AtomicInteger(0);
 
