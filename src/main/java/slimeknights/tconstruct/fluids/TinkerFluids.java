@@ -46,6 +46,8 @@ import slimeknights.mantle.datagen.MantleTags;
 import slimeknights.mantle.fluid.InvertedFluid;
 import slimeknights.mantle.fluid.UnplaceableFluid;
 import slimeknights.mantle.fluid.texture.FluidTextureCameraProvider;
+import slimeknights.mantle.item.ContainerFoodItem;
+import slimeknights.mantle.item.ContainerFoodItem.FluidContainerFoodItem;
 import slimeknights.mantle.registration.RegistrationHelper;
 import slimeknights.mantle.registration.object.EnumObject;
 import slimeknights.mantle.registration.object.FlowingFluidObject;
@@ -61,8 +63,6 @@ import slimeknights.tconstruct.fluids.fluids.PotionFluidType;
 import slimeknights.tconstruct.fluids.fluids.SlimeFluid;
 import slimeknights.tconstruct.fluids.fluids.SlimeFluidType;
 import slimeknights.tconstruct.fluids.item.BottleItem;
-import slimeknights.tconstruct.fluids.item.ContainerFoodItem;
-import slimeknights.tconstruct.fluids.item.ContainerFoodItem.FluidContainerFoodItem;
 import slimeknights.tconstruct.fluids.item.MagmaBottleItem;
 import slimeknights.tconstruct.fluids.item.PotionBucketItem;
 import slimeknights.tconstruct.fluids.util.BottleBrewingRecipe;
@@ -84,8 +84,8 @@ import slimeknights.tconstruct.tools.network.FluidDataSerializer;
 import slimeknights.tconstruct.world.TinkerWorld;
 
 import static slimeknights.mantle.Mantle.commonResource;
-import static slimeknights.tconstruct.fluids.block.BurningLiquidBlock.createBurning;
-import static slimeknights.tconstruct.fluids.block.MobEffectLiquidBlock.createEffect;
+import static slimeknights.mantle.block.fluid.BurningLiquidBlock.createBurning;
+import static slimeknights.mantle.block.fluid.MobEffectLiquidBlock.createEffect;
 
 /**
  * Contains all fluids used throughout the mod
